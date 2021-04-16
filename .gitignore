@@ -1,0 +1,4 @@
+.venv_tsetmc4
+data
+utils/__pycache__/
+.vscode
