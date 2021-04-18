@@ -51,19 +51,53 @@ def window(data :pd.DataFrame, size) -> pd.DataFrame:
     df.dropna(inplace=True)
     return df
 # %%
-
+def up_down(x):
+    if x>0:
+        return True
+    if x<=0:
+        return False
 def get_xy_df(tr_data:pd.DataFrame, window_size:int):
     w_data = window(tr_data, window_size)
     X = w_data.loc[:,'t0':f't{window_size-2}']
-    y = (w_data.loc[:,f't{window_size-1}']['adjClose_per'] > w_data.loc[:,f't{window_size-2}']['adjClose_per']).astype(int)
+    y = (w_data.loc[:,f't{window_size-1}']['adjClose_per'].apply(up_down)).astype(int)
     return X,y
 # %%
 
 tr_price_df = get_tr_price_df('وبملت')
 X, y = get_xy_df(tr_price_df, 15)
+X13, y14 = get_xy_df(tr_price_df, 14)
 
 X_train, X_test , y_train, y_test = train_test_split(X, y)
 
+# %%
+def prepair_y(share_name,time_n):
+    price_df = get_price_df(share_name)
+    price_df_w =  window(price_df['adjClose'],time_n)
+    n_colums = price_df_w.shape[1]
+    rezult = (price_df_w.iloc[:,n_colums-2]<price_df_w.iloc[:, n_colums-1]).astype(int)
+    
+    return rezult
+share_name = 'وبملت'
+y14 = prepair_y(share_name,14)
+# ii index_intersection
+ii = y14.index.intersection(y.index)
+cm_baseline_metric = metrics.confusion_matrix(y.loc[ii], y14[ii])
+score = (cm_baseline_metric[0,0] + cm_baseline_metric[1,1])/sum(cm_baseline_metric.reshape(-1))
+print(f'score of naive model is :{score}')
+
+# %%
+
+
+# %%
+y14.drop(y14.tail(1).index, inplace=True)
+# why i need drop? window with size n create Nan rows in
+# last n row, so itself must drop it. 
+# instead of above code we can use :
+# ii = y14.index.intersection(y.index)
+
+cm_baseline_metric = metrics.confusion_matrix(y, y14)
+score = (cm_baseline_metric[0,0] + cm_baseline_metric[1,1])/sum(cm_baseline_metric.reshape(-1))
+print(f'score of naive model is :{score}')
 # %%
 X_tmp = []
 y_tmp = []
@@ -97,7 +131,7 @@ print(f'score is: {score}')
 from sklearn import metrics
 cm = metrics.confusion_matrix(y_test, predictions)
 print(f'confusion matrix is: \n {cm}')
-
+# %%
 
 # %%
 #2. implementing a simple NN
@@ -114,7 +148,7 @@ model.compile(optimizer='adam',
               metrics=['accuracy'])
 
 # %%
-model.fit(X_train, y_train,validation_split=0.20, epochs=200)
+model.fit(X_train, y_train,validation_split=0.20, epochs=300)
 
 
 # %%
@@ -160,5 +194,9 @@ model.compile(optimizer='adam',
               loss=tf.keras.losses.BinaryCrossentropy(),
               metrics=['accuracy'])
 
-model.fit(X_np, y_np, epochs=250)
+model.fit(X_np, y_np,validation_split=0.20, epochs=250)
 # %%
+
+# create a sequence to sequence RNN 
+# train without related data to big up and down that happend
+# is that predictable ? 
