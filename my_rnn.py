@@ -81,43 +81,6 @@ score = (cm_baseline_metric[0,0] + cm_baseline_metric[1,1])/sum(cm_baseline_metr
 print(f'score of naive model is :{score}')
 
 # %%
-
-# tr_price_df = get_tr_price_df('وبملت')
-# X, y = get_xy_df(tr_price_df, 15)
-# X13, y14 = get_xy_df(tr_price_df, 14)
-
-# X_train, X_test , y_train, y_test = train_test_split(X, y)
-
-# %%
-# def prepair_y(share_name,time_n):
-#     price_df = get_price_df(share_name)
-#     price_df_w =  window(price_df['adjClose'],time_n)
-#     n_colums = price_df_w.shape[1]
-#     rezult = (price_df_w.iloc[:,n_colums-2]<price_df_w.iloc[:, n_colums-1]).astype(int)
-    
-#     return rezult
-# share_name = 'وبملت'
-# y14 = prepair_y(share_name,14)
-# # ii index_intersection
-# ii = y14.index.intersection(y.index)
-# cm_baseline_metric = metrics.confusion_matrix(y.loc[ii], y14[ii])
-# score = (cm_baseline_metric[0,0] + cm_baseline_metric[1,1])/sum(cm_baseline_metric.reshape(-1))
-# print(f'score of naive model is :{score}')
-
-# %%
-
-
-# %%
-# y14.drop(y14.tail(1).index, inplace=True)
-# # why i need drop? window with size n create Nan rows in
-# # last n row, so itself must drop it. 
-# # instead of above code we can use :
-# # ii = y14.index.intersection(y.index)
-
-# cm_baseline_metric = metrics.confusion_matrix(y, y14)
-# score = (cm_baseline_metric[0,0] + cm_baseline_metric[1,1])/sum(cm_baseline_metric.reshape(-1))
-# print(f'score of naive model is :{score}')
-# %%
 def get_all_xy_df(share_name_list, window_size):
     X_tmp = []
     y_tmp = []
