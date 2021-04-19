@@ -1,4 +1,5 @@
 .venv_tsetmc4
-data
+data/client_types_data/*
+data/tickers_data/*
 utils/__pycache__/
 .vscode
