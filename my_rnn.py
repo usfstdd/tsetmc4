@@ -1,4 +1,5 @@
 # %%
+from datetime import time
 from typing import Tuple
 import pandas as pd
 import numpy as np
@@ -12,26 +13,21 @@ from sklearn.model_selection import train_test_split
 '''
 goals:
 is there relation between historical data of tsetmc and price? 
+0. start with high, low, close, open, adjclose
 1. train it with data that related to a one share.
 2. combine all shares data and train it.
 3. 
 
 plan:
 
-1. create class 1 or 0, 1 --> next day price increase / 0 --> deacrese
+1. to see relation between price and historical data, 
+i predict class 0 when price goes down and class 1 when price goes up.
 
 1.1. simple NN only for price 
 1.2. simpleRNN only for price, add extra features one by one and trace changes.
 
 '''
-# %%
-def get_data(share_name):
-    df_inco = get_InCo_df(share_name)
-    df_price = get_price_df(share_name)
 
-    df_data = df_price.join(df_inco, how='inner')
-
-    return df_data
 # %%
 def get_tr_price_df(share_name):
     price_df = get_price_df(share_name)
@@ -43,67 +39,88 @@ def get_tr_price_df(share_name):
 import os
 SHARE_FOLDER = 'data/tickers_data'
 share_name_list = [share_name_dot_csv.replace('.csv', '') \
-                    for share_name_dot_csv in os.listdir(SHARE_FOLDER)]  
+                    for share_name_dot_csv in os.listdir(SHARE_FOLDER)]
 # %%
 def window(data :pd.DataFrame, size) -> pd.DataFrame:
     df = pd.concat([data.shift(-i) for i in range(size)], axis=1, 
             keys =[f't{i}' for i in range(size)])
     df.dropna(inplace=True)
     return df
-# %%
-def up_down(x):
-    if x>0:
-        return True
-    if x<=0:
-        return False
-def get_y(w_data, n_day):
-    return (w_data[n_day]['adjClose_per'].apply(up_down)).astype(int)
-    
-def get_xy_df(tr_data:pd.DataFrame, window_size:int):
-    w_data = window(tr_data, window_size)
-    
-    X = w_data.loc[:,'t0':f't{window_size-2}']
-    # y = (w_data.loc[:,f't{window_size-1}']['adjClose_per'].apply(up_down)).astype(int)
-    last_time_step = f't{window_size-1}'
-    y = get_y(w_data, last_time_step)
-
-    return X,y
 
 # %%
+def getXY(share_name, X_steps, y_steps, predict_at_last_step=True):
+    window_size = X_steps + y_steps
+    data = window(get_tr_price_df(share_name), window_size)
 
 
-tr_price_df = get_tr_price_df('وبملت')
-X, y = get_xy_df(tr_price_df, 15)
+    time_steps = list(data.columns.get_level_values(0).unique())
+    features = list(data.columns.get_level_values(1).unique())
+    m=data.shape[0]
 
-y13 = get_y(X,'t13')
-cm_baseline_metric = metrics.confusion_matrix(y, y13)
+    data_np =np.empty((m, len(time_steps), len(features)))
+    for t in range(len(time_steps)):
+        data_np[:,t,:] = data[time_steps[t]].values
+
+    if predict_at_last_step:
+        X_np = data_np[:,:X_steps,:]
+        y_np = (data_np[:, X_steps:, 3]>0).astype(np.int32)
+        return data, X_np, y_np
+
+    if not predict_at_last_step:
+        X_np = data_np[:, :X_steps ,:]
+        y_np = np.empty((m, X_steps, y_steps))
+        for t in range(1, y_steps+1):
+            y_np[:, :, t-1] = data_np[:, t:t+X_steps, 3]
+            y_np = (y_np>0).astype(np.int32)
+
+        return data, X_np, y_np
+
+        
+# %%
+
+# %%
+
+from sklearn import metrics
+# tr_price_df = get_tr_price_df('وبملت')
+# X, y = get_xy_df(tr_price_df, 15)
+
+# y13 = get_y(X,'t13')
+share_name = 'وبملت'
+data, X, y = getXY(share_name, 14, 1)
+y14 = (data['t13']['adjClose_per'] > 0).astype(np.int32)
+
+cm_baseline_metric = metrics.confusion_matrix(y, y14)
 score = (cm_baseline_metric[0,0] + cm_baseline_metric[1,1])/sum(cm_baseline_metric.reshape(-1))
 print(f'score of naive model is :{score}')
+X_train, X_test, y_train, y_test = train_test_split(X, y)
 
 # %%
-def get_all_xy_df(share_name_list, window_size):
+def get_all_xy_df(share_name_list):
+    data_tmp = []
     X_tmp = []
     y_tmp = []
 
     for share_name in share_name_list:
-        tr_price_df = get_tr_price_df(share_name)
-        X,y = get_xy_df(tr_price_df, window_size)
+        
+        data, X,y = getXY(share_name, 14,1)
 
         X_tmp.append(X)
         y_tmp.append(y)
+        data_tmp.append(data)
 
-    X_all = pd.concat(X_tmp, ignore_index=True)
-    y_all = pd.concat(y_tmp, ignore_index=True)
-    return X_all, y_all
+    X_all = np.concatenate(X_tmp, axis=0)
+    y_all = np.concatenate(y_tmp, axis=0)
+    data_all =pd.concat(data_tmp, ignore_index=True)
+    return data_all, X_all, y_all
 
 
-X_all, y_all = get_all_xy_df(share_name_list, 15)
+data_all, X_all, y_all = get_all_xy_df(share_name_list)
 X_train, X_test , y_train, y_test = train_test_split(X_all, y_all)
 
 # %%
 #calculate score of baseline metric for dataset of all shares info.
-y13 = get_y(X_all,'t13')
-cm_baseline_metric = metrics.confusion_matrix(y_all, y13)
+y14 = (data_all['t13']['adjClose_per'] > 0).astype(np.int32)
+cm_baseline_metric = metrics.confusion_matrix(y_all, y14)
 score = (cm_baseline_metric[0,0] + cm_baseline_metric[1,1])/sum(cm_baseline_metric.reshape(-1))
 print(f'score of naive model is :{score}')
 # %%
@@ -113,10 +130,10 @@ print(f'score of naive model is :{score}')
 from sklearn.linear_model import LogisticRegression
 log_reg = LogisticRegression()
 
-log_reg.fit(X_train, y_train)
+log_reg.fit(X_train.reshape(-1, 14 * 5), y_train)
 
-predictions = log_reg.predict(X_test)
-score = log_reg.score(X_test, y_test)
+predictions = log_reg.predict(X_test.reshape(-1, 14 * 5))
+score = log_reg.score(X_test.reshape(-1, 14 * 5), y_test)
 print(f'score is: {score}')
 
 from sklearn import metrics
@@ -133,42 +150,26 @@ model = tf.keras.Sequential([
     tf.keras.layers.Dense(10, activation='relu', input_shape= X_train.shape[1:]),
     tf.keras.layers.Dense(1)
 ])
-# %%
+
 model.compile(optimizer='adam',
               loss=tf.keras.losses.BinaryCrossentropy(),
               metrics=['accuracy'])
 
+model.summary()
 # %%
-model.fit(X_train, y_train,validation_split=0.20, epochs=300)
-
+checkpoint_path = 'training_1/simpleNN.ckpt'
+os.path.dirname(checkpoint_path)
+simple_NN_callback = tf.keras.callbacks.ModelCheckpoint(filepath=checkpoint_path,
+                                                        save_weights_only=True,
+                                                        verbose=1)
+# %%
+history = model.fit(X_train,
+          y_train,
+          validation_split=0.20, 
+          epochs=30,
+          callbacks=[simple_NN_callback])
 
 # %%
-#3. implementing a RNN
-
-def convert_df2np(w_df1:pd.DataFrame) -> np.ndarray:
-    '''
-    e.g.
-    l1 = np.arange(12).reshape(6,2)
-    df1 = pd.DataFrame(l1)
-    w_df1 = window(df1, 3)
-    convert_df2np(w_df1)
-    '''
-    # Todo : clean up!
-    # after sclicing X.columns.levels[0] give us base DataFrame levels 
-    # for more info see https://stackoverflow.com/questions/28772494/how-do-you-update-the-levels-of-a-pandas-multiindex-after-slicing-its-dataframe
-    # so i replace it with 
-    # w_df1.columns.get_level_values(0).unique()
-    # and replace w_df1.columns.levshape[0] with len(level0)
-    level0 = list(w_df1.columns.get_level_values(0).unique())
-
-    n1 = np.zeros(shape=(w_df1.shape[0], 
-                        len(level0),
-                        w_df1.columns.levshape[1]))
-    
-    for i in range(len(level0)):
-        n1[:, i, :] = w_df1.loc[:,level0[i]]
-    return n1.astype(np.float32)
-
 # %%
 #sequence to vector data
 from tensorflow import keras
